@@ -652,6 +652,10 @@ button.zitem:hover{border-color:var(--ink)}
 @media (min-width:981px) and (max-height:800px){ #viewPlay.dutymode:not(.readq) .scenein.sldmode{max-width:calc((100vh - 304px) * 880 / 580);min-width:0;margin:0 auto} }
 
 .rcard .condlist dt small{margin-left:6px;font-size:11px;font-family:var(--f-mono)}
+
+/* 狭い画面の当直：横の枠は図と操作の下へ回るので、一晩の帯を、図のすぐ下にも出す（広い画面では、横の枠の帯だけ） */
+.dbandm{display:none}
+@media (max-width:980px){ #viewPlay.dutymode .dbandm:not([hidden]){display:block} #viewPlay.dutymode .side .dband{display:none} .dbandm .tband{height:40px;margin:12px 0 14px} }
 </style>
 
 <div class="wrap">
@@ -726,6 +730,7 @@ button.zitem:hover{border-color:var(--ink)}
       <div class="stage-head"><span class="plateno" id="qNo"></span><h2 id="qName"></h2><span class="tag" id="qTag"></span><span class="chip" id="qCount"></span></div>
       <div class="scenewrap" id="sceneWrap"><div class="scenein" id="sceneIn"><canvas id="scene" aria-label="結線図"></canvas><canvas id="sld" hidden aria-label="単線結線図"></canvas><div class="hots" id="sldHot" hidden></div></div></div>
       <div class="verdict" id="verdict" aria-live="polite"></div>
+      <div class="dbandm" id="dutyBandM" hidden></div>
       <div class="condmini" id="condMini" aria-label="条件（狭い画面用の写し）"></div>
       <div class="logicwrap" id="logicwrap" hidden><div class="sublabel" id="logicTitle">継電器の中の判定</div><div class="logic" id="logic"></div></div>
       <div class="narr" id="narrwrap" hidden><div class="sublabel">ナレーション<small>青＝機械が自動ですること　橙＝人がすること</small></div><ol id="narr" aria-live="polite"></ol></div>
@@ -3998,7 +4003,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { TH
 function show(v) { U.view = v; document.body.dataset.view = v; ['Home', 'Unit', 'Play', 'Result'].forEach(n => { el('view' + n).hidden = v !== n.toLowerCase(); }); el('homeBtn').hidden = v === 'home'; setBar(false);
   if (v !== 'play') { U.mode = 'idle'; shutUp(); } if (v === 'home') { U.tab = null; paintHome(); } window.scrollTo(0, 0); }
 function setBar(on) { document.body.classList.toggle('showset', on); el('hudSet').setAttribute('aria-expanded', on ? 'true' : 'false'); }   /* 遊ぶ画面では、音と速さの設定を畳んでおく */
-const DUTY_PARTS = ['duty', 'dutyAlarm', 'dutyOps', 'dutyDeb', 'sldHot'];
+const DUTY_PARTS = ['duty', 'dutyAlarm', 'dutyOps', 'dutyDeb', 'sldHot', 'dutyBandM'];
 function seedFromInput() { const v = el('seedIn').value.trim(); return /^\d{1,9}$/.test(v) ? +v : 100000 + Math.floor(Math.random() * 900000); }
 function busy(on) { el('busy').hidden = !on; }
 /* ==================== 単元の入口：目標、継電器の説明、要点 ==================== */
@@ -4635,7 +4640,7 @@ function startDuty(key, seed) {
     U.seed = seed; U.dlist = DU.makeNight(key, seed); U.di = 0; U.drows = []; U.clock = 10; U.inc = null; setLast('t', key);
     U.q = { type: 'duty', kind: 'sld', knobs: n.knobs };
     show('play'); el('viewPlay').classList.remove('know', 'readq'); el('viewPlay').classList.add('dutymode');
-    ['result', 'logicwrap', 'sexp', 'lanes', 'ask', 'fix', 'night', 'seqlog'].forEach(id => { el(id).hidden = true; }); ['duty', 'dutyAlarm', 'dutyOps'].forEach(id => { el(id).hidden = false; });
+    ['result', 'logicwrap', 'sexp', 'lanes', 'ask', 'fix', 'night', 'seqlog'].forEach(id => { el(id).hidden = true; }); ['duty', 'dutyAlarm', 'dutyOps', 'dutyBandM'].forEach(id => { el(id).hidden = false; });
     setBoard(false); el('qNo').textContent = '当直'; el('qName').textContent = n.title; el('qTag').textContent = `第 ${n.no} 夜 · 工場の高圧受電設備`; el('dutyStory').textContent = n.story;
     el('dutyHelp').textContent = DUTY_HELP; el('duty').querySelector('.dhelp').open = !Object.values(DATA.duty).some(d => d && d.plays);   /* はじめての当直では、進め方と数え方を開いておく */
     dutyIncident();
@@ -4779,7 +4784,8 @@ function paintDuty() {
   el('dutyLog').scrollTop = el('dutyLog').scrollHeight;
   /* 一晩の帯：済んだ事故と、いまの事故。▼ は警報の時刻 */
   { const done = U.drows.filter(Boolean), segs = done.flatMap(r => r.segs).concat(U.drows[U.di] ? [] : segsOf(U.incStart, inc.hist, inc.init)), now = U.incStart + inc.min, marks = done.map((r, i) => ({ t: r.start, label: `事故 ${i + 1}` })).concat(U.drows[U.di] ? [] : [{ t: U.incStart, label: `事故 ${U.di + 1}` }]);
-    el('dutyBand').innerHTML = bandHTML(segs, null, { t0: 0, t1: Math.max(8 * 60 + 30, now + 60), now, marks }) + `<p class="tnote">${BAND_NOTE}。▼＝警報。</p>`; }
+    const bh = bandHTML(segs, null, { t0: 0, t1: Math.max(8 * 60 + 30, now + 60), now, marks });
+    el('dutyBand').innerHTML = bh + `<p class="tnote">${BAND_NOTE}。▼＝警報。</p>`; el('dutyBandM').innerHTML = bh; }   /* 狭い画面では、横の枠が下へ回るので、図のすぐ下にも同じ帯を出す */
   /* 図の上の押す所：開閉器（四角）と、点検・修理する区間（丸） */
   const pos = (x, y) => `left:${(x / 880 * 100).toFixed(2)}%;top:${(y / 580 * 100).toFixed(2)}%`, on = (t, k) => !!(U.pick && U.pick.t === t && U.pick.k === k);
   el('sldHot').innerHTML = Object.keys(A.open).filter(k => HOT_SW[k]).map(k => `<button class="hot sw${on('sw', k) ? ' on' : ''}" data-t="sw" data-k="${k}" style="${pos(HOT_SW[k][0], HOT_SW[k][1])}" aria-pressed="${on('sw', k)}" aria-label="${esc(DU.swName(k))}（いま ${A.open[k] ? '切' : '入'}）" title="${esc(DU.swName(k))}（いま ${A.open[k] ? '切' : '入'}）"></button>`).join('')
